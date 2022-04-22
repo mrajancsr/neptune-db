@@ -1,3 +1,5 @@
 .DS_Store
 neptunedb.egg-info
 build
+.vscode
+py39

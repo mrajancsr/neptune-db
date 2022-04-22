@@ -22,6 +22,7 @@ setuptools.setup(
         "sshtunnel",
         "dataclasses-json",
         "typing-inspect",
+        "asyncpg",
         "typing_extensions",
     ],
     include_package_data=True,

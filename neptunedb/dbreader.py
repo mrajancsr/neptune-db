@@ -14,7 +14,7 @@ import tempfile
 from configparser import ConfigParser
 from dataclasses import dataclass, field
 from sys import platform
-from typing import Any, AnyStr, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
 
 import asyncpg
 import pandas as pd
@@ -22,7 +22,7 @@ import psycopg2
 from paramiko import Ed25519Key
 from psycopg2.extras import DictCursor, execute_values
 from sshtunnel import SSHTunnelForwarder
-import boto3
+
 
 @dataclass
 class PlatformNotSupportedError(Exception):
@@ -32,6 +32,7 @@ class PlatformNotSupportedError(Exception):
 @dataclass
 class SectionNotExists(Exception):
     pass
+
 
 # -- aws credentials
 AURORAENDPOINT = os.environ.get("AURORAENDPOINT")
@@ -69,7 +70,7 @@ class DBReader:
             self.tunnel.start()
         elif platform == "linux" and not AURORAENDPOINT:
             self.section = "phobosquantdev-prod"
-        elif platform == 'linux' and AURORAENDPOINT:
+        elif platform == "linux" and AURORAENDPOINT:
             self.section = "phobosquantdev-awsauroraprod"
 
     async def __aenter__(self):
@@ -137,12 +138,10 @@ class DBReader:
                 return conn
         except asyncpg.ConnectionDoesNotExistError as error:
             print(error)
-    
+
     async def async_push(
-        self,
-        data: Iterator[Tuple[str, ...]],
-        table_name: str,
-        columns: List[str]) -> None:
+        self, data: Iterator[Tuple[str, ...]], table_name: str, columns: List[str]
+    ) -> None:
         """Pushes data to postgresql database
         Parameters
         ----------
@@ -168,7 +167,6 @@ class DBReader:
             print("error: ", e)
         finally:
             await conn.close()
-    
 
     def get_credentials(self) -> Optional[Dict[str, Any]]:
         if platform == "darwin" and self.tunnel.is_active:
@@ -177,12 +175,12 @@ class DBReader:
             port = "5432"
         params = self._read_db_config()
         if AURORAENDPOINT:
-            #gets the credentials from .aws/credentials
-            params['host'] = AURORAENDPOINT
-            params['database'] = AURORADB
-            params['user'] = AURORAUSER
-            params['password'] = AURORAPASSWORD
-        params['port'] = port
+            # gets the credentials from .aws/credentials
+            params["host"] = AURORAENDPOINT
+            params["database"] = AURORADB
+            params["user"] = AURORAUSER
+            params["password"] = AURORAPASSWORD
+        params["port"] = port
         return params
 
     def connect(self) -> Optional[connection]:
