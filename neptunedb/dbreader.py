@@ -161,17 +161,11 @@ class DBReader:
         asyncpg.DatabaseError
             if the table doesn't exist or incorrect data format
         """
-        conn = await self.async_connect()
-        # get the column names
-        col_names = ",".join(columns)
-        query = f"""INSERT INTO {table_name} ({col_names}) values %s"""
         # insert data into database and close connection
         try:
-            await conn.executemany(query, data)
+            await self.conn.copy_records_to_table(table_name, records=data, columns=columns)
         except Exception as e:
             print("error: ", e)
-        finally:
-            await conn.close()
 
     def get_credentials(self) -> Optional[Dict[str, Any]]:
         if platform == "darwin" and self.tunnel.is_active:
