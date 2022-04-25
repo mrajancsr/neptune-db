@@ -40,6 +40,11 @@ AURORADB = os.environ.get("AURORADB")
 AURORAUSER = os.environ.get("AURORAUSER")
 AURORAPASSWORD = os.environ.get("AURORAPASSWORD")
 
+# -- local credentials
+LOCALHOST = os.environ.get("PGLOCALHOST")
+POSTGRESUSER = os.environ.get("PGLOCALUSER")
+POSTGRESDB = os.environ.get("POSTGRESDB")
+POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 
 if platform == "darwin":
     path_to_secret_key = os.path.expanduser("~/timescale.pem")
@@ -52,7 +57,7 @@ else:
 connection = TypeVar("connection")
 sshtunnel = TypeVar("sshtunnel")
 
-CONFIG_PATH = os.getenv("PHOBOSSQLCONFIGPATH")
+CONFIG_PATH = os.getenv("NEPTUNESQLCONFIGPATH")
 CONFIG_FILE = os.path.join(CONFIG_PATH, "config.ini")
 
 
@@ -180,6 +185,12 @@ class DBReader:
             params["database"] = AURORADB
             params["user"] = AURORAUSER
             params["password"] = AURORAPASSWORD
+        elif LOCALHOST:
+            # get credentials from localhost
+            params["host"] = LOCALHOST
+            params["database"] = POSTGRESDB
+            params["user"] = POSTGRESUSER
+            params["password"] = POSTGRESPASSWORD
         params["port"] = port
         return params
 
