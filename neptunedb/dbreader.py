@@ -63,7 +63,7 @@ CONFIG_FILE = os.path.join(CONFIG_PATH, "config.ini")
 
 @dataclass
 class DBReader:
-    section: str = field(init=False, default="phobosquantdev-dev")
+    section: str = field(init=False, default="neptunequantdev-dev")
     tunnel: Optional[sshtunnel] = field(init=False, default=None)
     pkey: Optional[Ed25519Key] = field(init=False, default=None)
     column_names: List[str] = field(init=False, default_factory=list)
@@ -74,9 +74,9 @@ class DBReader:
             self.tunnel = self._create_tunnel()
             self.tunnel.start()
         elif platform == "linux" and not AURORAENDPOINT:
-            self.section = "phobosquantdev-prod"
+            self.section = "neptunequantdev-prod"
         elif platform == "linux" and AURORAENDPOINT:
-            self.section = "phobosquantdev-awsauroraprod"
+            self.section = "neptunequantdev-awsauroraprod"
 
     async def __aenter__(self):
         self.tunnel = self._create_tunnel()
