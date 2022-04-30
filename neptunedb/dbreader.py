@@ -57,9 +57,6 @@ else:
 connection = TypeVar("connection")
 sshtunnel = TypeVar("sshtunnel")
 
-CONFIG_PATH = os.getenv("NEPTUNESQLCONFIGPATH")
-CONFIG_FILE = os.path.join(CONFIG_PATH, "config.ini")
-
 
 @dataclass
 class DBReader:
@@ -97,35 +94,6 @@ class DBReader:
         )
         return tunnel
 
-    def _read_db_config(self) -> Dict[str, str]:
-        """reads database configuration from config.ini file
-
-        Returns
-        -------
-        Dict
-            contains database configuration
-
-        Raises
-        ------
-        Exception
-            raises error if wrong environment is chosen
-        """
-        if not os.path.exists(CONFIG_PATH):
-            raise FileNotFoundError(f"config_path: {CONFIG_FILE}")
-
-        parser = ConfigParser()
-        parser.read(CONFIG_FILE)
-
-        # get the section, default to postgressql
-        config = {}
-        section = self.section
-        if parser.has_section(section):
-            params = parser.items(section)
-            for param in params:
-                config[param[0]] = param[1]
-        else:
-            raise SectionNotExists(f"Incorrect Section {section} provided")
-        return config
 
     async def async_connect(self) -> Optional[connection]:
         """Connects to the postgresql securities_master db
@@ -172,7 +140,7 @@ class DBReader:
             port = self.tunnel.local_bind_port
         elif platform == "linux":
             port = "5432"
-        params = self._read_db_config()
+        params = {}
         if AURORAENDPOINT:
             # gets the credentials from .aws/credentials
             params["host"] = AURORAENDPOINT
