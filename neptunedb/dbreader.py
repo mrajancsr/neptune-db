@@ -49,9 +49,9 @@ POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 # -- execute code in docker only
 EXECUTE_IN_DOCKER_ONLY = os.environ.get("EXECUTE_IN_DOCKER_ONLY", "FALSE")
 
-if platform == "darwin":
+if platform == "darwin" or (platform == 'linux' and EXECUTE_IN_DOCKER_ONLY == 'TRUE'):
     path_to_secret_key = os.path.expanduser("~/timescale.pem")
-elif platform == "linux":
+elif platform == "linux" and AURORAENDPOINT:
     path_to_secret_key = None
 else:
     raise PlatformNotSupportedError("Only supported in linux or darwin systems")
