@@ -15,7 +15,7 @@ from configparser import ConfigParser
 from dataclasses import dataclass, field
 from sys import platform
 from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
-
+from json import loads
 import asyncpg
 import pandas as pd
 import psycopg2
@@ -47,9 +47,9 @@ POSTGRESDB = os.environ.get("POSTGRESDB")
 POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 
 # -- execute code in docker only
-EXECUTE_IN_DOCKER_ONLY = os.environ.get("EXECUTE_IN_DOCKER_ONLY", "FALSE")
+EXECUTE_IN_DOCKER = loads(os.environ.get("EXECUTE_IN_DOCKER", "FALSE").lower())
 
-if platform == "darwin" or (platform == 'linux' and EXECUTE_IN_DOCKER_ONLY == 'TRUE'):
+if platform == "darwin" or (platform == 'linux' and EXECUTE_IN_DOCKER):
     path_to_secret_key = os.path.expanduser("~/timescale.pem")
 elif platform == "linux" and AURORAENDPOINT:
     path_to_secret_key = None
