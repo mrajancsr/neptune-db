@@ -46,6 +46,9 @@ POSTGRESUSER = os.environ.get("PGLOCALUSER")
 POSTGRESDB = os.environ.get("POSTGRESDB")
 POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 
+# -- execute code in docker only
+EXECUTE_IN_DOCKER_ONLY = os.environ.get("EXECUTE_IN_DOCKER_ONLY", "FALSE")
+
 if platform == "darwin":
     path_to_secret_key = os.path.expanduser("~/timescale.pem")
 elif platform == "linux":
@@ -66,14 +69,12 @@ class DBReader:
     column_names: List[str] = field(init=False, default_factory=list)
 
     def __post_init__(self) -> None:
-        if platform == "darwin":
+        if platform == "darwin" or platform == 'linux' and not AURORAENDPOINT:
             self.pkey = Ed25519Key.from_private_key_file(path_to_secret_key)
             self.tunnel = self._create_tunnel()
             self.tunnel.start()
-        elif platform == "linux" and not AURORAENDPOINT:
-            self.section = "neptunequantdev-prod"
         elif platform == "linux" and AURORAENDPOINT:
-            self.section = "neptunequantdev-awsauroraprod"
+            self.section = "neptunequantdev-prod"
 
     async def __aenter__(self):
         self.tunnel = self._create_tunnel()
@@ -136,9 +137,10 @@ class DBReader:
             print("error: ", e)
 
     def get_credentials(self) -> Optional[Dict[str, Any]]:
-        if platform == "darwin" and self.tunnel.is_active:
+        if platform == "darwin" or platform == 'linux' and self.tunnel.is_active:
             port = self.tunnel.local_bind_port
-        elif platform == "linux":
+        elif platform == "linux" and AURORAENDPOINT:
+            # assumes code is executed in vpc
             port = "5432"
         params = {}
         if AURORAENDPOINT:
