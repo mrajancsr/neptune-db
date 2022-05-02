@@ -1,10 +1,7 @@
 # pyre-strict
 # Notes
 # To run the file, follow the following steps:
-# -- 1) ensure there is a sql_config directory in phobos-lab directory
-# -- 2) make a environment variable named PHOBOSSQLCONFIGPATH
-#    that points to location of sql_config dir
-# -- 3) Ensure timescale.pem is located in users Home dir
+# --  Ensure timescale.pem is located in users Home dir
 
 # -- Currently only darwin and linux platforms are supported
 
