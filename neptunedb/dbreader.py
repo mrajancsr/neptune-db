@@ -11,11 +11,11 @@
 
 import os
 import tempfile
-from configparser import ConfigParser
 from dataclasses import dataclass, field
+from json import loads
 from sys import platform
 from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
-from json import loads
+
 import asyncpg
 import pandas as pd
 import psycopg2
@@ -25,7 +25,7 @@ from sshtunnel import SSHTunnelForwarder
 
 
 @dataclass
-class PlatformNotSupportedError(Exception):
+class PlatformNotSupported(Exception):
     pass
 
 
@@ -49,12 +49,12 @@ POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 # -- execute code in docker only
 EXECUTE_IN_DOCKER = loads(os.environ.get("EXECUTE_IN_DOCKER", "FALSE").lower())
 
-if platform == "darwin" or (platform == 'linux' and EXECUTE_IN_DOCKER):
+if platform == "darwin" or (platform == "linux" and EXECUTE_IN_DOCKER):
     path_to_secret_key = os.path.expanduser("~/timescale.pem")
 elif platform == "linux" and AURORAENDPOINT:
     path_to_secret_key = None
 else:
-    raise PlatformNotSupportedError("Only supported in linux or darwin systems")
+    raise PlatformNotSupported("Only linux and darwin Supported")
 
 # custom Type to represent psycopg2 connection and sshtunnel
 connection = TypeVar("connection")
@@ -69,7 +69,7 @@ class DBReader:
     column_names: List[str] = field(init=False, default_factory=list)
 
     def __post_init__(self) -> None:
-        if platform == "darwin" or platform == 'linux' and not AURORAENDPOINT:
+        if platform == "darwin" or platform == "linux" and not AURORAENDPOINT:
             self.pkey = Ed25519Key.from_private_key_file(path_to_secret_key)
             self.tunnel = self._create_tunnel()
             self.tunnel.start()
@@ -94,7 +94,6 @@ class DBReader:
             remote_bind_address=("localhost", 5432),
         )
         return tunnel
-
 
     async def async_connect(self) -> Optional[connection]:
         """Connects to the postgresql securities_master db
@@ -132,12 +131,14 @@ class DBReader:
         """
         # insert data into database and close connection
         try:
-            await self.conn.copy_records_to_table(table_name, records=data, columns=columns)
+            await self.conn.copy_records_to_table(
+                table_name, records=data, columns=columns
+            )
         except Exception as e:
             print("error: ", e)
 
     def get_credentials(self) -> Optional[Dict[str, Any]]:
-        if platform == "darwin" or platform == 'linux' and self.tunnel.is_active:
+        if self.tunnel.is_active:
             port = self.tunnel.local_bind_port
         elif platform == "linux" and AURORAENDPOINT:
             # assumes code is executed in vpc
@@ -294,8 +295,7 @@ class DBReader:
         """
         if data is None:
             return
-        size = data.shape[0]
-        print(f"Ready to push {('' if not name else name)} with size {size} rows")
+        print("Ready to push")
         with tempfile.TemporaryDirectory() as tmp_dir:
             out_path = os.path.join(tmp_dir, "output.csv")
             data.to_csv(out_path, index=False, header=False)
@@ -313,10 +313,3 @@ class DBReader:
                     cursor.close()
                 finally:
                     conn.close()
-
-        print(f"pushed {('' if not name else name)} to {table_name} table")
-
-
-if __name__ == "__main__":
-    db = DBReader()
-    print(db.fetchdf("select * from min_bars limit 30"))
