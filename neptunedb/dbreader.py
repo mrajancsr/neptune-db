@@ -1,15 +1,16 @@
 # pyre-strict
 import asyncio
+import logging
 import os
 import tempfile
-import logging
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+
 import asyncpg
+import pandas as pd
 import psycopg2
 from psycopg2.extras import DictCursor, execute_values
-import pandas as pd
-from contextlib import contextmanager
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
@@ -73,7 +74,9 @@ class SyncDBReader:
                 for q in query:
                     cursor.execute(q)
 
-    def push(self, data: Iterator[Tuple], table_name: str, columns: List[str]) -> None:
+    def push(
+        self, data: Iterator[Tuple], table_name: str, columns: List[str]
+    ) -> None:
         query = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES %s"
         with self.get_cursor() as cursor:
             execute_values(cursor, query, data)
@@ -120,10 +123,14 @@ class AsyncDBReader:
             logger.error(f"Async fetch failed: {e}")
             raise
 
-    async def push(self, data: Iterator[Tuple], table_name: str, columns: List[str],) -> None:
+    async def push(
+        self, data: Iterator[Tuple], table_name: str, columns: List[str]
+    ) -> None:
         conn = await self.connect()
         try:
-            await conn.copy_records_to_table(table_name, records=data, columns=columns)
+            await conn.copy_records_to_table(
+                table_name, records=data, columns=columns
+            )
         except Exception as e:
             logger.error(f"Async data push failed: {e}")
             raise
@@ -140,9 +147,12 @@ async def main():
     config = DBConfig.from_env()
 
     async with AsyncDBReader(config) as reader:
-        rows = await reader.fetch("SELECT * FROM pg_catalog.pg_tables LIMIT 5;")
+        rows = await reader.fetch(
+            "SELECT * FROM pg_catalog.pg_tables LIMIT 5;"
+        )
         for row in rows:
             print(dict(row))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
