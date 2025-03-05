@@ -16,7 +16,6 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
 import asyncpg
 import pandas as pd
 import psycopg2
-from paramiko import Ed25519Key
 from psycopg2.extras import DictCursor, execute_values
 from sshtunnel import SSHTunnelForwarder
 
@@ -31,66 +30,29 @@ class SectionNotExists(Exception):
     pass
 
 
-# -- aws credentials
-AURORAENDPOINT = os.environ.get("AURORAENDPOINT")
-AURORADB = os.environ.get("AURORADB")
-AURORAUSER = os.environ.get("AURORAUSER")
-AURORAPASSWORD = os.environ.get("AURORAPASSWORD")
-
 # -- local credentials
 LOCALHOST = os.environ.get("PGLOCALHOST")
 POSTGRESUSER = os.environ.get("PGLOCALUSER")
 POSTGRESDB = os.environ.get("POSTGRESDB")
 POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
 
-# -- execute code in docker only
-EXECUTE_IN_DOCKER = loads(os.environ.get("EXECUTE_IN_DOCKER", "FALSE").lower())
 
-if platform == "darwin" or (platform == "linux" and EXECUTE_IN_DOCKER):
-    path_to_secret_key = os.path.expanduser("~/timescale.pem")
-elif platform == "linux" and AURORAENDPOINT:
-    path_to_secret_key = None
-else:
-    raise PlatformNotSupported("Only linux and darwin Supported")
 
 # custom Type to represent psycopg2 connection and sshtunnel
 connection = TypeVar("connection")
-sshtunnel = TypeVar("sshtunnel")
 
 
 @dataclass
 class DBReader:
     section: str = field(init=False, default="neptunequantdev-dev")
-    tunnel: Optional[sshtunnel] = field(init=False, default=None)
-    pkey: Optional[Ed25519Key] = field(init=False, default=None)
     column_names: List[str] = field(init=False, default_factory=list)
 
-    def __post_init__(self) -> None:
-        if platform == "darwin" or platform == "linux" and not AURORAENDPOINT:
-            self.pkey = Ed25519Key.from_private_key_file(path_to_secret_key)
-            self.tunnel = self._create_tunnel()
-            self.tunnel.start()
-        elif platform == "linux" and AURORAENDPOINT:
-            self.section = "neptunequantdev-prod"
-
     async def __aenter__(self):
-        self.tunnel = self._create_tunnel()
-        self.tunnel.start()
         self.conn = await self.async_connect()
         return self
 
     async def __aexit__(self, *args):
         await self.conn.close()
-        self.tunnel.close()
-
-    def _create_tunnel(self) -> sshtunnel:
-        tunnel = SSHTunnelForwarder(
-            ("204.236.250.15", 22),
-            ssh_username="ubuntu",
-            ssh_pkey=self.pkey,
-            remote_bind_address=("localhost", 5432),
-        )
-        return tunnel
 
     async def async_connect(self) -> Optional[connection]:
         """Connects to the postgresql securities_master db
@@ -135,25 +97,13 @@ class DBReader:
             print("error: ", e)
 
     def get_credentials(self) -> Optional[Dict[str, Any]]:
-        if self.tunnel.is_active:
-            port = self.tunnel.local_bind_port
-        elif platform == "linux" and AURORAENDPOINT:
-            # assumes code is executed in vpc
-            port = "5432"
         params = {}
-        if AURORAENDPOINT:
-            # gets the credentials from .aws/credentials
-            params["host"] = AURORAENDPOINT
-            params["database"] = AURORADB
-            params["user"] = AURORAUSER
-            params["password"] = AURORAPASSWORD
-        elif LOCALHOST:
-            # get credentials from localhost
-            params["host"] = LOCALHOST
-            params["database"] = POSTGRESDB
-            params["user"] = POSTGRESUSER
-            params["password"] = POSTGRESPASSWORD
-        params["port"] = port
+        # get credentials from localhost
+        params["host"] = LOCALHOST
+        params["database"] = POSTGRESDB
+        params["user"] = POSTGRESUSER
+        params["password"] = POSTGRESPASSWORD
+        params["port"] = 5432
         return params
 
     def connect(self) -> Optional[connection]:
