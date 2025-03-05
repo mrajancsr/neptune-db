@@ -1,262 +1,148 @@
 # pyre-strict
-# Notes
-# To run the file, follow the following steps:
-# --  Ensure timescale.pem is located in users Home dir
-
-# -- Currently only darwin and linux platforms are supported
-
-
+import asyncio
 import os
 import tempfile
-from dataclasses import dataclass, field
-from json import loads
-from sys import platform
-from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
-
+import logging
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from dataclasses import dataclass
 import asyncpg
-import pandas as pd
 import psycopg2
 from psycopg2.extras import DictCursor, execute_values
-from sshtunnel import SSHTunnelForwarder
+import pandas as pd
+from contextlib import contextmanager
+
+# Configure basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
+# --- Configuration Class ---
 @dataclass
-class PlatformNotSupported(Exception):
-    pass
+class DBConfig:
+    host: str
+    database: str
+    user: str
+    password: str
+    port: int = 5432
+
+    @staticmethod
+    def from_env() -> "DBConfig":
+        return DBConfig(
+            host=os.getenv("PGLOCALHOST"),
+            database=os.getenv("POSTGRESDB"),
+            user=os.getenv("PGLOCALUSER"),
+            password=os.getenv("POSTGRESPASSWORD"),
+        )
 
 
-@dataclass
-class SectionNotExists(Exception):
-    pass
+# --- Synchronous DBReader ---
+class SyncDBReader:
+    def __init__(self, config: DBConfig):
+        self.config = config
 
-
-# -- local credentials
-LOCALHOST = os.environ.get("PGLOCALHOST")
-POSTGRESUSER = os.environ.get("PGLOCALUSER")
-POSTGRESDB = os.environ.get("POSTGRESDB")
-POSTGRESPASSWORD = os.environ.get("POSTGRESPASSWORD")
-
-
-
-# custom Type to represent psycopg2 connection and sshtunnel
-connection = TypeVar("connection")
-
-
-@dataclass
-class DBReader:
-    section: str = field(init=False, default="neptunequantdev-dev")
-    column_names: List[str] = field(init=False, default_factory=list)
-
-    async def __aenter__(self):
-        self.conn = await self.async_connect()
-        return self
-
-    async def __aexit__(self, *args):
-        await self.conn.close()
-
-    async def async_connect(self) -> Optional[connection]:
-        """Connects to the postgresql securities_master db
-
-        Returns
-        -------
-        Optional[connection]
-            a connection object or None if failed to connect
-        """
+    def connect(self) -> psycopg2.extensions.connection:
         try:
-            params = self.get_credentials()
-            conn = await asyncpg.connect(**params)
-            if conn:
-                print("Connected to Postgres")
-                return conn
-        except asyncpg.ConnectionDoesNotExistError as error:
-            print(error)
+            return psycopg2.connect(**self.config.__dict__)
+        except psycopg2.DatabaseError as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
 
-    async def async_push(
-        self, data: Iterator[Tuple[str, ...]], table_name: str, columns: List[str]
-    ) -> None:
-        """Pushes data to postgresql database
-        Parameters
-        ----------
-        data : Iterator[Dict[str, Any]]
-            to push to postgresql database
-        table_name : str
-            the table to push to
-        columns : List[str]
-            column names of the data
-        Raises
-        ------
-        asyncpg.DatabaseError
-            if the table doesn't exist or incorrect data format
-        """
-        # insert data into database and close connection
-        try:
-            await self.conn.copy_records_to_table(
-                table_name, records=data, columns=columns
-            )
-        except Exception as e:
-            print("error: ", e)
+    @contextmanager
+    def get_cursor(self):
+        with self.connect() as conn:
+            with conn.cursor(cursor_factory=DictCursor) as cursor:
+                yield cursor
+                conn.commit()
 
-    def get_credentials(self) -> Optional[Dict[str, Any]]:
-        params = {}
-        # get credentials from localhost
-        params["host"] = LOCALHOST
-        params["database"] = POSTGRESDB
-        params["user"] = POSTGRESUSER
-        params["password"] = POSTGRESPASSWORD
-        params["port"] = 5432
-        return params
-
-    def connect(self) -> Optional[connection]:
-        """Connects to the postgresql securities_master db
-
-        Returns
-        -------
-        Optional[connection]
-            a connection object or None if failed to connect
-        """
-        try:
-            params = self.get_credentials()
-            conn = psycopg2.connect(**params)
-            if conn:
-                print("Connected to PostgresDB")
-            return conn
-        except psycopg2.DatabaseError as error:
-            print(error)
-
-    async def async_fetch(self, query: str):
-        rows = await self.conn.fetch(query)
-        return rows
-
-    def fetch(self, query: str) -> Optional[Tuple[Dict[str, Any]]]:
-        """Returns data associated with the table
-
-        Parameters
-        ----------
-        query : str
-            [description]
-
-        Returns
-        -------
-        Optional[Tuple[Dict[str, Any]]]
-            Tuple of Table rows
-        """
-
-        try:
-            conn = self.connect()
-            if conn:
-                with conn.cursor(cursor_factory=DictCursor) as curr:
-                    curr.execute(query)
-                    self.column_names = [col.name for col in curr.description]
-                    rows = curr.fetchall()
-                conn.close()
-                return rows
-        except psycopg2.DatabaseError as error:
-            print(error)
+    def fetch(self, query: str) -> List[Dict[str, Any]]:
+        with self.get_cursor() as cursor:
+            cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            return [dict(zip(columns, row)) for row in rows]
 
     def fetchdf(self, query: str) -> pd.DataFrame:
-        """Returns a pandas dataframe of the db query"""
-        return pd.DataFrame(self.fetch(query), columns=self.column_names)
+        rows = self.fetch(query)
+        return pd.DataFrame(rows)
 
-    def drop(self, table_name: str) -> None:
-        """removes table given by table_name from dev db
+    def execute(self, query: Union[str, List[str]]) -> None:
+        with self.get_cursor() as cursor:
+            if isinstance(query, str):
+                cursor.execute(query)
+            else:
+                for q in query:
+                    cursor.execute(q)
 
-        Parameters
-        ----------
-        table_name : str
-            the table in database
-        """
-        self.execute(f"drop table {table_name};")
-
-    def execute(self, query: Union[str, Tuple[str]]) -> None:
-        """Executes an query statement
-
-        Parameters
-        ----------
-        query : Union[str, Tuple[str]]
-            a single statement or tuple of queries
-        """
-        try:
-            conn = self.connect()
-            if conn:
-                with conn.cursor() as curr:
-                    if isinstance(query, str):
-                        curr.execute(query)
-                    elif isinstance(query, tuple):
-                        for q in query:
-                            curr.execute(q)
-                conn.commit()
-                conn.close()
-        except Exception as e:
-            print(e)
-
-    def push(
-        self,
-        data: Iterator[Tuple[str, ...]],
-        table_name: str,
-        columns: List[str],
-    ) -> None:
-        """Pushes data to postgresql database
-        Parameters
-        ----------
-        data : Iterator[Dict[str, Any]]
-            to push to postgresql database
-        table_name : str
-            the table to push to
-        columns : List[str]
-            column names of the data
-        Raises
-        ------
-        psycopg2.DatabaseError
-            if the table doesn't exist or incorrect data format
-        """
-        conn = self.connect()
-        cursor = conn.cursor()
-        # get the column names
-        col_names = ",".join(columns)
-        query = f"""INSERT INTO {table_name} ({col_names}) values %s"""
-        # insert data into database and close connection
-        try:
+    def push(self, data: Iterator[Tuple], table_name: str, columns: List[str]) -> None:
+        query = f"INSERT INTO {table_name} ({','.join(columns)}) VALUES %s"
+        with self.get_cursor() as cursor:
             execute_values(cursor, query, data)
-            conn.commit()
-            cursor.close()
-        except (Exception, psycopg2.DatabaseError) as e:
-            print("error: ", e)
-            conn.rollback()
-            cursor.close()
-        finally:
-            conn.close()
 
-    def copy_from_csv(
-        self, data: pd.DataFrame, table_name: str, name: Optional[str] = ""
-    ) -> None:
-        """Copies data to table_name in securities_master db
+    def copy_from_csv(self, df: pd.DataFrame, table_name: str) -> None:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp_file:
+            df.to_csv(tmp_file.name, index=False, header=False)
+            tmp_file.close()
 
-        Parameters
-        ----------
-        data : pd.DataFrame
-            large data to be pushed to table_name
-        table_name : str
-            table in securities_master
-        name : Optional[str],
-            name of the data, default=''
-        """
-        if data is None:
-            return
-        print("Ready to push")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            out_path = os.path.join(tmp_dir, "output.csv")
-            data.to_csv(out_path, index=False, header=False)
-            with open(out_path, "r") as f:
-                next(f)
-                conn = self.connect()
-                cursor = conn.cursor()
-                try:
-                    cursor.copy_from(f, table_name, sep=",", null="")
+            with self.connect() as conn:
+                with conn.cursor() as cursor, open(tmp_file.name, "r") as file:
+                    cursor.copy_from(file, table_name, sep=",")
                     conn.commit()
-                    cursor.close()
-                except (Exception, psycopg2.DatabaseError) as e:
-                    print("error: ", e)
-                    conn.rollback()
-                    cursor.close()
-                finally:
-                    conn.close()
+
+            os.remove(tmp_file.name)
+
+
+# --- Asynchronous DBReader ---
+class AsyncDBReader:
+    def __init__(self, config: DBConfig):
+        self.config = config
+        self.conn: Optional[asyncpg.Connection] = None
+
+    async def connect(self) -> asyncpg.Connection:
+        if self.conn is None:
+            try:
+                self.conn = await asyncpg.connect(**self.config.__dict__)
+                logger.info("Connected to PostgreSQL asynchronously.")
+            except Exception as e:
+                logger.error(f"Async connection failed: {e}")
+                raise
+        return self.conn
+
+    async def close(self):
+        if self.conn is not None:
+            await self.conn.close()
+            self.conn = None
+
+    async def fetch(self, query: str) -> List[asyncpg.Record]:
+        conn = await self.connect()
+        try:
+            return await conn.fetch(query)
+        except Exception as e:
+            logger.error(f"Async fetch failed: {e}")
+            raise
+
+    async def push(self, data: Iterator[Tuple], table_name: str, columns: List[str],) -> None:
+        conn = await self.connect()
+        try:
+            await conn.copy_records_to_table(table_name, records=data, columns=columns)
+        except Exception as e:
+            logger.error(f"Async data push failed: {e}")
+            raise
+
+    async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+
+async def main():
+    config = DBConfig.from_env()
+
+    async with AsyncDBReader(config) as reader:
+        rows = await reader.fetch("SELECT * FROM pg_catalog.pg_tables LIMIT 5;")
+        for row in rows:
+            print(dict(row))
+
+if __name__ == '__main__':
+    asyncio.run(main())
