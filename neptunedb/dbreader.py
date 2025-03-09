@@ -115,17 +115,54 @@ class AsyncDBReader:
             await self.conn.close()
             self.conn = None
 
-    async def fetch(self, query: str) -> List[asyncpg.Record]:
+    async def fetch(self, query: str, *args) -> List[asyncpg.Record]:
         conn = await self.connect()
         try:
-            return await conn.fetch(query)
+            return await conn.fetch(query, *args)
         except Exception as e:
             logger.error(f"Async fetch failed: {e}")
+            raise
+
+    async def execute(self, query: Union[str, List[str]], *args) -> None:
+        """Executes one of multiple SQL queries asynchronously
+
+        Parameters
+        ----------
+        query : Union[str, List[str]]
+            _description_
+        """
+        conn = await self.connect()
+        try:
+            if isinstance(query, str):
+                await conn.execute(query, *args)
+            else:
+                async with conn.transaction():
+                    for i, q in enumerate(query):
+                        try:
+                            await conn.execute(q)
+                        except Exception as sub_e:
+                            logger.error(
+                                f"Query {i + 1}/{len(query)} failed: {sub_e} | Query: {q}"  # noqa
+                            )
+                            raise sub_e
+        except Exception as e:
+            logger.error(f"Async execute batch failed: {e}")
             raise
 
     async def push(
         self, data: Iterator[Tuple], table_name: str, columns: List[str]
     ) -> None:
+        """Inserts bulk data asynchronously into a PostgreSQL table
+
+        Parameters
+        ----------
+        data : Iterator[Tuple]
+            The data to insert, as an iterator of tuples
+        table_name : str
+            The name of target table
+        columns : List[str]
+            The column names corresponding to the data
+        """
         conn = await self.connect()
         try:
             await conn.copy_records_to_table(
@@ -155,4 +192,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    # used for debugging purposes
     asyncio.run(main())
