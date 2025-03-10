@@ -12,34 +12,17 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import DictCursor, execute_values
 
+from neptunedb.db_config import DBConfig
+
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# --- Configuration Class ---
-@dataclass
-class DBConfig:
-    host: str
-    database: str
-    user: str
-    password: str
-    port: int = 5432
-
-    @staticmethod
-    def from_env() -> "DBConfig":
-        return DBConfig(
-            host=os.getenv("PGLOCALHOST"),
-            database=os.getenv("POSTGRESDB"),
-            user=os.getenv("PGLOCALUSER"),
-            password=os.getenv("POSTGRESPASSWORD"),
-        )
-
-
 # --- Synchronous DBReader ---
+@dataclass
 class SyncDBReader:
-    def __init__(self, config: DBConfig):
-        self.config = config
+    config: DBConfig
 
     def connect(self) -> psycopg2.extensions.connection:
         try:
@@ -95,10 +78,12 @@ class SyncDBReader:
 
 
 # --- Asynchronous DBReader ---
+
+
+@dataclass
 class AsyncDBReader:
-    def __init__(self, config: DBConfig):
-        self.config = config
-        self.conn: Optional[asyncpg.Connection] = None
+    config: DBConfig
+    conn: Optional[asyncpg.Connection] = None
 
     async def connect(self) -> asyncpg.Connection:
         if self.conn is None:

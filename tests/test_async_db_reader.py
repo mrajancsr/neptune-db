@@ -1,6 +1,3 @@
-import asyncio
-
-import asyncpg
 import pytest
 
 from neptunedb.dbreader import AsyncDBReader, DBConfig
