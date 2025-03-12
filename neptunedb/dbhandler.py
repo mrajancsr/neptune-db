@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- Synchronous DBReader ---
 @dataclass
-class SyncDBReader:
+class SyncDBHandler:
     config: DBConfig
 
     def connect(self) -> psycopg2.extensions.connection:
@@ -81,7 +81,7 @@ class SyncDBReader:
 
 
 @dataclass
-class AsyncDBReader:
+class AsyncDBHandler:
     config: DBConfig
     conn: Optional[asyncpg.Connection] = None
 
@@ -168,7 +168,7 @@ class AsyncDBReader:
 async def main():
     config = DBConfig.from_env()
 
-    async with AsyncDBReader(config) as reader:
+    async with AsyncDBHandler(config) as reader:
         rows = await reader.fetch(
             "SELECT * FROM pg_catalog.pg_tables LIMIT 5;"
         )
