@@ -1,6 +1,6 @@
 import pytest
 
-from neptunedb.dbreader import AsyncDBReader, DBConfig
+from neptunedb.dbhandler import AsyncDBReader, DBConfig
 
 # Define test database config
 TEST_DB_CONFIG = DBConfig(
