@@ -135,18 +135,18 @@ class AsyncDBHandler:
             raise
 
     async def push(
-        self, data: Iterator[Tuple], table_name: str, columns: List[str]
+        self, table_name: str, columns: List[str], data: Iterator[Tuple]
     ) -> None:
-        """Inserts bulk data asynchronously into a PostgreSQL table
+        """Inserts bulk data asynchronously into PostgreSQL table
 
         Parameters
         ----------
-        data : Iterator[Tuple]
-            The data to insert, as an iterator of tuples
         table_name : str
-            The name of target table
+            The name of target table to insert data into
         columns : List[str]
             The column names corresponding to the data
+        data : Iterator[Tuple]
+            The data to insert, as an iterator of tuples
         """
         conn = await self.connect()
         try:
